@@ -3,6 +3,8 @@
 // An algorithm to rebalance an investment portfolio using
 // the cash-flow rebalancing technique, given the desired asset allocation
 // and the montly contribution
+
+// eslint-disable-next-line import/extensions
 import Portfolio from '../classes/Portfolio.js';
 
 /**
@@ -16,6 +18,7 @@ import Portfolio from '../classes/Portfolio.js';
 function isBalanced(portfolio, targetAllocation) {
   const percentages = portfolio.getPortfolioAllocation();
 
+  // eslint-disable-next-line no-restricted-syntax, guard-for-in
   for (const asset in percentages) {
     const targetDifference = Math.abs(
       Number(targetAllocation[asset]) - Number(percentages[asset])
@@ -41,12 +44,8 @@ function rebalance(
   montlyContribution,
   montlyInvestments = []
 ) {
-  //base case: Portfolio is balanced
+  // base case: Portfolio is balanced
   if (isBalanced(currentPortfolio, targetAllocation)) {
-    console.log(currentPortfolio.assets);
-    console.log(currentPortfolio.value);
-    console.log(currentPortfolio.getPortfolioAllocation());
-
     return montlyInvestments;
   }
 
@@ -63,22 +62,22 @@ function rebalance(
       const targetDifference =
         Number(targetAllocation[assetName]) - Number(assetAllocation);
 
-      //asset is over the target allocation
+      // asset is over the target allocation
       if (targetDifference < 0) {
         overTargetAssets.push({
-          assetName: assetName,
+          assetName,
           value: Math.abs(targetDifference).toFixed(2),
         });
       } else if (targetDifference > 0) {
         belowTargetAssets.push({
-          assetName: assetName,
+          assetName,
           value: targetDifference.toFixed(2),
         });
       }
     }
   );
 
-  //Sort by most unbalanced assets
+  // Sort by most unbalanced assets
   belowTargetAssets.sort(
     (currentAsset, nextAsset) =>
       Number(nextAsset.value) - Number(currentAsset.value)
@@ -94,9 +93,11 @@ function rebalance(
 
       if (difference < 0) {
         newAssetAllocation[assetName] = '0';
+        // eslint-disable-next-line no-param-reassign
         currentBalance += Number(targetAllocation[assetName]);
       } else {
         newAssetAllocation[assetName] = difference.toFixed(2);
+        // eslint-disable-next-line no-param-reassign
         currentBalance += Number(value);
       }
 
@@ -118,6 +119,7 @@ function rebalance(
     ).toFixed(2);
   });
 
+  // eslint-disable-next-line no-param-reassign
   currentPortfolio.assets = portfolioAssets;
   montlyInvestments.push(currentMonthInvestment);
 
@@ -130,11 +132,10 @@ function rebalance(
 }
 
 function rebalancePortfolio(portfolio, targetAllocation, montlyContribution) {
-  //create a copy of the Portfolio
+  // create a copy of the Portfolio
   const portfolioCopy = new Portfolio(portfolio.assets);
 
   return rebalance(portfolioCopy, targetAllocation, montlyContribution);
 }
 
-/** A Function to rebalance a portfolio */
 export default rebalancePortfolio;
