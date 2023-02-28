@@ -1,5 +1,8 @@
 /** @module classes/Porfolio */
 
+// eslint-disable-next-line import/extensions
+import Fraction from 'fraction.js';
+
 /**
  * Represents an Investment Portfolio
  */
@@ -10,22 +13,22 @@ class Portfolio {
   #assets;
 
   /**
-   * @property {String} #assets The portfolio value
+   * @property {Fraction} #assets The portfolio value
    */
   #value;
 
   /**
    * @property {Function} #calculatePortolioValue Calculates the portfolio value
-   * @returns {string} The Portfolio Assets
+   * @returns {Fraction} The Portfolio Assets
    */
   #calculatePortfolioValue() {
-    let currentTotal = 0;
+    let currentTotal = new Fraction(0);
 
-    Object.values(this.#assets).forEach((amount) => {
-      currentTotal += Number(amount);
+    Object.values(this.#assets).forEach((/** @type {Fraction} */ amount) => {
+      currentTotal = currentTotal.add(amount);
     });
 
-    return currentTotal.toFixed(2);
+    return currentTotal;
   }
 
   /**
@@ -56,7 +59,7 @@ class Portfolio {
 
   /**
    * Get the portfolio value
-   * @return {String} The porfolio value
+   * @return {Fraction} The porfolio value
    */
   get value() {
     return this.#value;
@@ -69,10 +72,12 @@ class Portfolio {
   getPortfolioAllocation() {
     const percentages = {};
 
-    Object.entries(this.#assets).forEach(([assetName, assetValue]) => {
-      percentages[assetName] = (
-        Number(assetValue) / Number(this.#value)
-      ).toFixed(2);
+    Object.entries(this.#assets).forEach((asset) => {
+      const assetName = asset[0];
+      /** @type {Fraction} */
+      const assetValue = asset[1];
+
+      percentages[assetName] = assetValue.div(this.#value);
     });
 
     return percentages;

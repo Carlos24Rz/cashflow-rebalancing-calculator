@@ -4,6 +4,7 @@
 // the cash-flow rebalancing technique, given the desired asset allocation
 // and the montly contribution
 
+import Fraction from 'fraction.js';
 // eslint-disable-next-line import/extensions
 import Portfolio from '../classes/Portfolio.js';
 
@@ -20,11 +21,11 @@ function isBalanced(portfolio, targetAllocation) {
 
   // eslint-disable-next-line no-restricted-syntax, guard-for-in
   for (const asset in percentages) {
-    const targetDifference = Math.abs(
-      Number(targetAllocation[asset]) - Number(percentages[asset])
-    );
+    const targetDifference = targetAllocation[asset]
+      .sub(percentages[asset])
+      .abs();
 
-    if (targetDifference > 0.01) return false;
+    if (targetDifference.compare(new Fraction('0.05')) > 0) return false;
   }
 
   return true;
@@ -34,7 +35,7 @@ function isBalanced(portfolio, targetAllocation) {
  * Portfolio rebalancing algorithm using recursion and a greedy approach
  * @param {Portfolio} currentPortfolio The Current Portfolio
  * @param {Object} targetAllocation The Desired Asset Allocation
- * @param {Number} montlyContribution The Montly Contribution
+ * @param {Fraction} montlyContribution The Montly Contribution
  * @param {Object[]} montlyInvestments The Current Monthly Investment to rebalance the portfolio
  * @returns {Object[]} The Monthly Rebalance Investment until the portfolio is rebalanced
  */
@@ -59,64 +60,61 @@ function rebalance(
 
   Object.entries(portfolioAllocation).forEach(
     ([assetName, assetAllocation]) => {
-      const targetDifference =
-        Number(targetAllocation[assetName]) - Number(assetAllocation);
+      const targetDifference = targetAllocation[assetName].sub(assetAllocation);
 
       // asset is over the target allocation
-      if (targetDifference < 0) {
+      if (targetDifference.compare(new Fraction('0')) < 0) {
         overTargetAssets.push({
           assetName,
-          value: Math.abs(targetDifference).toFixed(2),
+          value: targetDifference.abs(),
         });
-      } else if (targetDifference > 0) {
+      } else if (targetDifference.compare(new Fraction('0')) > 0) {
         belowTargetAssets.push({
           assetName,
-          value: targetDifference.toFixed(2),
+          value: targetDifference,
         });
       }
     }
   );
 
   // Sort by most unbalanced assets
-  belowTargetAssets.sort(
-    (currentAsset, nextAsset) =>
-      Number(nextAsset.value) - Number(currentAsset.value)
+  belowTargetAssets.sort((currentAsset, nextAsset) =>
+    nextAsset.value.compare(currentAsset.value)
   );
-  overTargetAssets.sort(
-    (currentAsset, nextAsset) =>
-      Number(nextAsset.value) - Number(currentAsset.value)
+  overTargetAssets.sort((currentAsset, nextAsset) =>
+    nextAsset.value.compare(currentAsset.value)
   );
 
   const rebalanceAmount = overTargetAssets.reduce(
     (currentBalance, { assetName, value }) => {
-      const difference = Number(targetAllocation[assetName]) - Number(value);
+      // newAssetAllocation[assetName] = new Fraction('0');
+      // // eslint-disable-next-line no-param-reassign
+      // currentBalance = currentBalance.add(targetAllocation[assetName]);
+      const difference = targetAllocation[assetName].sub(value);
 
-      if (difference < 0) {
-        newAssetAllocation[assetName] = '0';
+      if (difference.compare(new Fraction('0')) < 0) {
+        newAssetAllocation[assetName] = new Fraction('0');
         // eslint-disable-next-line no-param-reassign
-        currentBalance += Number(targetAllocation[assetName]);
+        currentBalance = currentBalance.add(targetAllocation[assetName]);
       } else {
-        newAssetAllocation[assetName] = difference.toFixed(2);
+        newAssetAllocation[assetName] = difference;
         // eslint-disable-next-line no-param-reassign
-        currentBalance += Number(value);
+        currentBalance = currentBalance.add(value);
       }
 
       return currentBalance;
     },
-    0
+    new Fraction('0')
   );
 
   newAssetAllocation[belowTargetAssets[0].assetName] =
-    Number(targetAllocation[belowTargetAssets[0].assetName]) + rebalanceAmount;
+    targetAllocation[belowTargetAssets[0].assetName].add(rebalanceAmount);
 
   Object.entries(newAssetAllocation).forEach(([assetName, assetAllocation]) => {
-    currentMonthInvestment[assetName] = (
-      Number(montlyContribution) * Number(assetAllocation)
-    ).toFixed(2);
-    portfolioAssets[assetName] = (
-      Number(portfolioAssets[assetName]) +
-      Number(currentMonthInvestment[assetName])
-    ).toFixed(2);
+    currentMonthInvestment[assetName] = montlyContribution.mul(assetAllocation);
+    portfolioAssets[assetName] = portfolioAssets[assetName].add(
+      currentMonthInvestment[assetName]
+    );
   });
 
   // eslint-disable-next-line no-param-reassign
@@ -138,4 +136,5 @@ function rebalancePortfolio(portfolio, targetAllocation, montlyContribution) {
   return rebalance(portfolioCopy, targetAllocation, montlyContribution);
 }
 
+/** The portfolio rebalancing calculator */
 export default rebalancePortfolio;
