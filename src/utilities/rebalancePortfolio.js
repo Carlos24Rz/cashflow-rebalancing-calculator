@@ -5,135 +5,192 @@
 // and the montly contribution
 
 import Fraction from 'fraction.js';
-// eslint-disable-next-line import/extensions
-import Portfolio from '../classes/Portfolio.js';
+
+// Determines how the error variation of the algorithm
+// Vanguard suggest to rebalance a portfolio only if an
+// asset has shifted more than 5 percentage points from its target
+// https://investor.vanguard.com/investor-resources-education/article/3-rebalancing-tips-to-fine-tune-your-portfolio
+const UNBALANCED_RANGE = new Fraction('0');
 
 /**
- * Vanguard suggest to rebalance a portfolio only if an
- * asset has shifted more than 5 percentage points from its target
- * https://investor.vanguard.com/investor-resources-education/article/3-rebalancing-tips-to-fine-tune-your-portfolio
- *
- * @param {Portfolio} portfolio
- * @param {Object} targetAllocation
- */
-function isBalanced(portfolio, targetAllocation) {
-  const percentages = portfolio.getPortfolioAllocation();
-
-  // eslint-disable-next-line no-restricted-syntax, guard-for-in
-  for (const asset in percentages) {
-    const targetDifference = targetAllocation[asset]
-      .sub(percentages[asset])
-      .abs();
-
-    if (targetDifference.compare(new Fraction('0.05')) > 0) return false;
-  }
-
-  return true;
-}
-
-/**
- * Portfolio rebalancing algorithm using recursion and a greedy approach
- * @param {Portfolio} currentPortfolio The Current Portfolio
- * @param {Object} targetAllocation The Desired Asset Allocation
+ * Portfolio rebalancing visualizing algorithm using a greedy approach
+ * @param {Portfolio} portofolio The current portfolio
+ * @param {Object} targetAllocation The desired asset allocation
+ * @param {Object} currentPortfolio The amount of money it need to be invested per asset to balance it
+ * @param {Fraction} remainingPortfolioValue The total amount of money to be invested
  * @param {Fraction} montlyContribution The Montly Contribution
- * @param {Object[]} montlyInvestments The Current Monthly Investment to rebalance the portfolio
  * @returns {Object[]} The Monthly Rebalance Investment until the portfolio is rebalanced
  */
 function rebalance(
-  currentPortfolio,
+  portofolio,
   targetAllocation,
-  montlyContribution,
-  montlyInvestments = []
+  balancedPortfolio,
+  montlyContribution
 ) {
-  // base case: Portfolio is balanced
-  if (isBalanced(currentPortfolio, targetAllocation)) {
-    return montlyInvestments;
+  const montlyAllocation = [];
+
+  // Order assets by those that have shifted the most from its original allocation
+  const portfolioAllocation = portofolio.getPortfolioAllocation();
+  const balancedPortfolioList = Object.entries(balancedPortfolio).sort(
+    (
+      // eslint-disable-next-line no-unused-vars
+      [currentAssetName, currentAssetValue],
+      // eslint-disable-next-line no-unused-vars
+      [nextAssetName, nextAssetValue]
+    ) => {
+      const nextAssetDifference = targetAllocation[nextAssetName].sub(
+        portfolioAllocation[nextAssetName]
+      );
+      const currentAssetDiffrence = targetAllocation[currentAssetName].sub(
+        portfolioAllocation[currentAssetName]
+      );
+
+      return nextAssetDifference.compare(currentAssetDiffrence);
+    }
+  );
+
+  let index = 0;
+
+  while (index < balancedPortfolioList.length) {
+    let remainingMonthAmount = montlyContribution;
+    const monthAllocation = Object.keys(targetAllocation).reduce(
+      (dict, assetName) => {
+        // eslint-disable-next-line no-param-reassign
+        dict[assetName] = new Fraction('0');
+
+        return dict;
+      },
+      {}
+    );
+
+    while (remainingMonthAmount.compare(new Fraction('0')) !== 0) {
+      const difference =
+        balancedPortfolioList[index][1].sub(remainingMonthAmount);
+
+      if (difference.compare(new Fraction('0')) >= 0) {
+        balancedPortfolioList[index][1] = difference;
+        monthAllocation[balancedPortfolioList[index][0]] =
+          monthAllocation[balancedPortfolioList[index][0]].add(
+            remainingMonthAmount
+          );
+        remainingMonthAmount = new Fraction('0');
+        montlyAllocation.push(monthAllocation);
+      } else {
+        monthAllocation[balancedPortfolioList[index][0]] = monthAllocation[
+          balancedPortfolioList[index][0]
+        ].add(balancedPortfolioList[index][1]);
+        balancedPortfolioList[index][1] = new Fraction('0');
+        remainingMonthAmount = difference.abs();
+        // eslint-disable-next-line no-plusplus
+        index++;
+      }
+
+      if (index >= balancedPortfolioList.length) break;
+    }
   }
 
-  const belowTargetAssets = [];
-  const overTargetAssets = [];
-  const currentMonthInvestment = {};
-  const newAssetAllocation = { ...targetAllocation };
+  return montlyAllocation;
+}
 
-  const portfolioAssets = currentPortfolio.assets;
-  const portfolioAllocation = currentPortfolio.getPortfolioAllocation();
+function rebalancePortfolio(portfolio, targetAllocation, montlyContribution) {
+  const targetAllocationDict = {};
+  const balancedAllocation = { ...targetAllocation };
+  const overTargetAllocationAssets = [];
 
-  Object.entries(portfolioAllocation).forEach(
+  // hash the percentages to get which assets have the same target allocation
+  Object.entries(targetAllocation).forEach(([assetName, assetValue]) => {
+    const assetAllocationFraction = assetValue.toFraction();
+
+    if (!targetAllocationDict[assetAllocationFraction]) {
+      targetAllocationDict[assetAllocationFraction] = [];
+    }
+
+    targetAllocationDict[assetAllocationFraction].push(assetName);
+  });
+
+  Object.entries(portfolio.getPortfolioAllocation()).forEach(
     ([assetName, assetAllocation]) => {
       const targetDifference = targetAllocation[assetName].sub(assetAllocation);
 
       // asset is over the target allocation
       if (targetDifference.compare(new Fraction('0')) < 0) {
-        overTargetAssets.push({
+        overTargetAllocationAssets.push({
           assetName,
           value: targetDifference.abs(),
-        });
-      } else if (targetDifference.compare(new Fraction('0')) > 0) {
-        belowTargetAssets.push({
-          assetName,
-          value: targetDifference,
         });
       }
     }
   );
 
   // Sort by most unbalanced assets
-  belowTargetAssets.sort((currentAsset, nextAsset) =>
-    nextAsset.value.compare(currentAsset.value)
-  );
-  overTargetAssets.sort((currentAsset, nextAsset) =>
+  overTargetAllocationAssets.sort((currentAsset, nextAsset) =>
     nextAsset.value.compare(currentAsset.value)
   );
 
-  const rebalanceAmount = overTargetAssets.reduce(
-    (currentBalance, { assetName, value }) => {
-      // newAssetAllocation[assetName] = new Fraction('0');
-      // // eslint-disable-next-line no-param-reassign
-      // currentBalance = currentBalance.add(targetAllocation[assetName]);
-      const difference = targetAllocation[assetName].sub(value);
+  const mostUnbalancedAssetFraction =
+    targetAllocation[overTargetAllocationAssets[0].assetName].toFraction();
 
-      if (difference.compare(new Fraction('0')) < 0) {
-        newAssetAllocation[assetName] = new Fraction('0');
-        // eslint-disable-next-line no-param-reassign
-        currentBalance = currentBalance.add(targetAllocation[assetName]);
-      } else {
-        newAssetAllocation[assetName] = difference;
-        // eslint-disable-next-line no-param-reassign
-        currentBalance = currentBalance.add(value);
+  const baselineAsset = targetAllocationDict[
+    mostUnbalancedAssetFraction
+  ].reduce((currentMax, currentAsset) => {
+    // eslint-disable-next-line no-param-reassign
+    if (!currentMax) currentMax = currentAsset;
+    else {
+      const assetValue = portfolio.assets[currentAsset];
+      const maxValue = portfolio.assets[currentMax];
+
+      // eslint-disable-next-line no-param-reassign
+      if (maxValue.compare(assetValue) < 0) currentMax = currentAsset;
+    }
+
+    return currentMax;
+  }, '');
+
+  // Adjust allocation based on the error variation
+  balancedAllocation[baselineAsset] =
+    targetAllocation[baselineAsset].add(UNBALANCED_RANGE);
+
+  // remove surplus created by shifting most unbalanced asset by the error variation
+  let unbalancedSurplus = UNBALANCED_RANGE;
+  while (unbalancedSurplus.compare(new Fraction('0')) > 0) {
+    // eslint-disable-next-line no-restricted-syntax, guard-for-in
+    for (const asset in balancedAllocation) {
+      if (unbalancedSurplus.compare(new Fraction('0')) <= 0) break;
+
+      const difference = balancedAllocation[asset].sub(new Fraction('0.01'));
+
+      if (
+        asset !== baselineAsset &&
+        difference.compare(new Fraction('0')) > 0
+      ) {
+        balancedAllocation[asset] = difference;
+        unbalancedSurplus = unbalancedSurplus.sub(new Fraction('0.01'));
       }
+    }
+  }
 
-      return currentBalance;
-    },
-    new Fraction('0')
+  const balancedValuePortfolio = portfolio.assets[baselineAsset].div(
+    balancedAllocation[baselineAsset]
   );
 
-  newAssetAllocation[belowTargetAssets[0].assetName] =
-    targetAllocation[belowTargetAssets[0].assetName].add(rebalanceAmount);
+  let remainingPortfolioValue = new Fraction('0');
+  // calculate remaining contributions for each asset
+  Object.entries(balancedAllocation).forEach(([assetName, assetAllocation]) => {
+    balancedAllocation[assetName] = assetAllocation
+      .mul(balancedValuePortfolio)
+      .sub(portfolio.assets[assetName]);
 
-  Object.entries(newAssetAllocation).forEach(([assetName, assetAllocation]) => {
-    currentMonthInvestment[assetName] = montlyContribution.mul(assetAllocation);
-    portfolioAssets[assetName] = portfolioAssets[assetName].add(
-      currentMonthInvestment[assetName]
+    remainingPortfolioValue = remainingPortfolioValue.add(
+      balancedAllocation[assetName]
     );
   });
 
-  // eslint-disable-next-line no-param-reassign
-  currentPortfolio.assets = portfolioAssets;
-  montlyInvestments.push(currentMonthInvestment);
-
   return rebalance(
-    currentPortfolio,
+    portfolio,
     targetAllocation,
-    montlyContribution,
-    montlyInvestments
+    balancedAllocation,
+    montlyContribution
   );
-}
-
-function rebalancePortfolio(portfolio, targetAllocation, montlyContribution) {
-  // create a copy of the Portfolio
-  const portfolioCopy = new Portfolio(portfolio.assets);
-
-  return rebalance(portfolioCopy, targetAllocation, montlyContribution);
 }
 
 /** The portfolio rebalancing calculator */
